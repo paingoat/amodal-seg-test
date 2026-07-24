@@ -112,7 +112,8 @@ import transformers, diffusers, accelerate, gradio, cv2, torch
 from diffusers import StableDiffusionInpaintPipeline  # noqa: F401
 assert transformers.__version__.startswith("4.46.")
 assert diffusers.__version__.startswith("0.32.")
-print("OK: torch/cv2/clip/diffusers/transformers/gradio")
+import addict, pycocotools  # sibling runtime deps
+print("OK: torch/cv2/clip/diffusers/transformers/gradio/addict/pycocotools")
 PY
 }
 

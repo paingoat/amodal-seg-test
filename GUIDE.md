@@ -365,15 +365,29 @@ python -c "import pydantic,gradio,gradio_client; from gradio_client.serializing 
 
 Log `[LISA] DeepSpeed init_inference failed ... using plain fp16` là **bình thường** (fallback sẵn).
 
-### `ModuleNotFoundError: No module named 'clip'`
-OpenAI CLIP phải cài riêng (`--no-build-isolation`).
+### Gradio UI: `TypeError: argument of type 'bool' is not iterable` / `localhost is not accessible`
+`pydantic>=2.11` sinh schema `additionalProperties: true` (bool) → crash `gradio_client` khi parse API info. Máy lab cũng hay fail health-check localhost.
 
 ```bash
 conda activate amodal
+# pull code mới (gradio_app.py: show_api=False + skip localhost check)
+git pull
+bash scripts/fix_amodal_deps.sh   # pins gradio + pydantic<2.11
 source scripts/paths.env
-bash scripts/fix_amodal_deps.sh
-python scripts/verify_amodal.py
+bash scripts/start_gradio.sh
+# Mở http://<IP-lab>:7861
 ```
+
+Hotfix tạm (chưa pull được):
+
+```bash
+conda activate amodal
+python -m pip install "gradio==4.44.1" "gradio_client==1.3.0" "pydantic>=2.0,<2.11"
+# trong gradio_app.py → demo.launch(..., show_api=False)
+```
+
+### `ModuleNotFoundError: No module named 'clip'`
+OpenAI CLIP phải cài riêng (`--no-build-isolation`): `bash scripts/fix_amodal_deps.sh`.
 
 ### `cannot import name 'Dinov2WithRegistersConfig'` (amodal / start_gradio / main.py)
 `diffusers 0.39` cần `transformers` rất mới. Repo **cố ý pin** `diffusers==0.32.2` + `transformers==4.46.3` (đủ cho SD2 inpaint).

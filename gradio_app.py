@@ -336,9 +336,28 @@ def main():
     )
     parser.add_argument("--share", action="store_true")
     args = parser.parse_args()
+
+    # Quiet analytics; lab machines often break Gradio's localhost probe.
+    os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
+    if _env("GRADIO_SKIP_LOCALHOST_CHECK", "1") == "1":
+        try:
+            import gradio.networking as _gradio_net
+
+            _gradio_net.url_ok = lambda *_a, **_k: True
+        except Exception:
+            pass
+
     demo = build_ui()
     demo.queue()
-    demo.launch(server_name="0.0.0.0", server_port=args.port, share=args.share)
+    # show_api=False avoids gradio_client schema bug (additionalProperties: bool)
+    # when mismatched client versions parse API info on page load.
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=args.port,
+        share=args.share,
+        show_api=False,
+        inbrowser=False,
+    )
 
 
 if __name__ == "__main__":

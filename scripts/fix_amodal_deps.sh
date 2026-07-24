@@ -27,7 +27,11 @@ python -m pip install --no-build-isolation \
   "git+https://github.com/openai/CLIP.git@d50d76daa670286dd6cacf3bcd80b5e4823fc8e1"
 
 echo "[fix_amodal_deps] Ensuring Gradio UI deps ..."
-python -m pip install "gradio==4.44.1" "gradio_client>=1.3.0,<1.5.0"
+# Gradio 4.44.1 + gradio_client 1.3.0; keep pydantic<2.11 (bool additionalProperties crash)
+python -m pip install "gradio==4.44.1" "gradio_client==1.3.0" "pydantic>=2.0,<2.11"
+
+echo "[fix_amodal_deps] Sibling runtime deps (GroundingDINO / InstaOrder) ..."
+python -m pip install "addict>=2.4.0" "yapf>=0.40.0" "pycocotools>=2.0.6" "supervision>=0.22.0"
 
 echo "[fix_amodal_deps] Verifying imports ..."
 python "$AMODAL_ROOT/scripts/verify_amodal.py"

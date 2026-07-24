@@ -151,12 +151,19 @@ fi
 if command -v conda >/dev/null 2>&1; then
   eval "$(conda shell.bash hook)"
   echo "[model] Installing GroundingDINO / segment_anything / RAM into env $AMODAL_ENV_NAME ..."
+  # Install declared runtime deps first (editable install often skips them if already partially present)
+  conda run -n "$AMODAL_ENV_NAME" python -m pip install \
+    "addict>=2.4.0" "yapf>=0.40.0" "pycocotools>=2.0.6" "supervision>=0.22.0" || true
+  if [ -f "$GROUNDED_SAM_REPO/GroundingDINO/requirements.txt" ]; then
+    conda run -n "$AMODAL_ENV_NAME" python -m pip install -r "$GROUNDED_SAM_REPO/GroundingDINO/requirements.txt" || true
+  fi
   conda run -n "$AMODAL_ENV_NAME" python -m pip install -e "$GROUNDED_SAM_REPO/GroundingDINO" || \
     echo "WARN: GroundingDINO editable install failed (see GUIDE.md)."
   conda run -n "$AMODAL_ENV_NAME" python -m pip install -e "$GROUNDED_SAM_REPO/segment_anything" || \
     conda run -n "$AMODAL_ENV_NAME" python -m pip install git+https://github.com/facebookresearch/segment-anything.git || true
   conda run -n "$AMODAL_ENV_NAME" python -m pip install -e "$RAM_REPO" || true
-  # InstaOrder is imported via sys.path; no pip package required typically
+  # InstaOrder is imported via sys.path; ensure pycocotools present
+  conda run -n "$AMODAL_ENV_NAME" python -m pip install "pycocotools>=2.0.6" || true
 fi
 
 echo
