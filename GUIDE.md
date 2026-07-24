@@ -475,12 +475,12 @@ Tải tay InstaOrderNet_od (nếu `model.sh` fail):
 
 ```bash
 conda activate amodal
-source scripts/paths.env
+source scripts/paths.env          # bắt buộc — set $INSTAORDER_CKPT
 python -m pip install -q "gdown>=5.0"
-python -m gdown --fuzzy \
-  "https://drive.google.com/uc?id=1QLikFxNOEW1Ld2oAZff8mL26FO4Mwwpv" \
-  -O "$INSTAORDER_CKPT"
+# gdown>=6 bỏ --fuzzy; truyền file id trực tiếp:
+python -m gdown 1QLikFxNOEW1Ld2oAZff8mL26FO4Mwwpv -O "$INSTAORDER_CKPT"
 du -h "$INSTAORDER_CKPT"   # phải >> 0 (thường ~100MB+)
+echo "$INSTAORDER_CKPT"    # kiểm tra path không rỗng
 ```
 
 ### Thiếu mask `.pkl`

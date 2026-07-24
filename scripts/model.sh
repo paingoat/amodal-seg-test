@@ -99,11 +99,11 @@ download_instaorder_ckpt() {
   fi
 
   echo "[model] Downloading InstaOrderNet_od via gdown (Google Drive) ..."
-  local gdown_id="1QLikFxNOEW1Ld2oAZff8mL26FO4Mwwpv"  # InstaOrderNet o,d
+  # InstaOrderNet o,d — pass file id (gdown>=6 removed --fuzzy)
+  local gdown_id="1QLikFxNOEW1Ld2oAZff8mL26FO4Mwwpv"
   if conda run -n "$AMODAL_ENV_NAME" python -m pip show gdown >/dev/null 2>&1 || \
      conda run -n "$AMODAL_ENV_NAME" python -m pip install -q "gdown>=5.0"; then
-    if conda run -n "$AMODAL_ENV_NAME" python -m gdown --fuzzy \
-      "https://drive.google.com/uc?id=${gdown_id}" -O "$out"; then
+    if conda run -n "$AMODAL_ENV_NAME" python -m gdown "$gdown_id" -O "$out"; then
       local sz
       sz="$(wc -c <"$out" | tr -d '[:space:]')"
       if [ "$sz" -ge "$min_bytes" ]; then
@@ -116,7 +116,8 @@ download_instaorder_ckpt() {
 
   echo "WARN: InstaOrder auto-download failed."
   echo "      Manual options:"
-  echo "        1) gdown --fuzzy 'https://drive.google.com/uc?id=${gdown_id}' -O '$out'"
+  echo "        1) source scripts/paths.env"
+  echo "           python -m gdown $gdown_id -O \"\$INSTAORDER_CKPT\""
   echo "        2) Full pack (3.5G): https://drive.google.com/file/d/1_GEmCmofLSkJZnidfp4vsQb2Nqq5aqBU/view"
   echo "           unzip and copy InstaOrder_InstaOrderNet_od.pth.tar → $out"
   return 1
