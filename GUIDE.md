@@ -443,6 +443,23 @@ RTX 5090 dùng compute capability `12.0`; script tự đặt
 Nếu `nvcc` không tồn tại, cài CUDA toolkit cùng version với
 `torch.version.cuda` trước. Mask LISA cũ vẫn dùng lại được.
 
+Nếu báo `detected CUDA 12.0 mismatches PyTorch 13.2`, máy chỉ có compiler
+`/usr/bin/nvcc` 12.0 dù driver/PyTorch đã là 13.2. Cần toolkit 13.2:
+
+```bash
+# NVIDIA CUDA apt repository phải được cấu hình trước
+sudo apt update
+sudo apt install cuda-toolkit-13-2
+
+/usr/local/cuda-13.2/bin/nvcc --version
+export CUDA_HOME=/usr/local/cuda-13.2
+export PATH="$CUDA_HOME/bin:$PATH"
+bash scripts/fix_groundingdino_ops.sh
+```
+
+Không downgrade PyTorch xuống CUDA 12.0: toolkit 12.0 không hỗ trợ kiến trúc
+Blackwell `sm_120` của RTX 5090.
+
 ### `ModuleNotFoundError: No module named 'fairscale'`
 RAM (`recognize-anything`) cần `fairscale`:
 
