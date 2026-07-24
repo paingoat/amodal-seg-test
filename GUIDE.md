@@ -365,14 +365,19 @@ python -c "import pydantic,gradio,gradio_client; from gradio_client.serializing 
 
 Log `[LISA] DeepSpeed init_inference failed ... using plain fp16` là **bình thường** (fallback sẵn).
 
-### Gradio UI: `TypeError: argument of type 'bool' is not iterable` / `localhost is not accessible`
-`pydantic>=2.11` sinh schema `additionalProperties: true` (bool) → crash `gradio_client` khi parse API info. Máy lab cũng hay fail health-check localhost.
+### Gradio UI crashes on open (`bool is not iterable` / `unhashable type: 'dict'` / localhost)
+Ba lỗi thường đi cùng lệch stack Gradio 4.44:
+
+| Lỗi | Nguyên nhân |
+|-----|-------------|
+| `argument of type 'bool' is not iterable` | `pydantic>=2.11` |
+| `unhashable type: 'dict'` (Jinja2 TemplateResponse) | `starlette>=1.0` |
+| `localhost is not accessible` | lab fail health-check → cần `gradio_app.py` mới |
 
 ```bash
 conda activate amodal
-# pull code mới (gradio_app.py: show_api=False + skip localhost check)
 git pull
-bash scripts/fix_amodal_deps.sh   # pins gradio + pydantic<2.11
+bash scripts/fix_amodal_deps.sh   # pins gradio + pydantic<2.11 + starlette<1
 source scripts/paths.env
 bash scripts/start_gradio.sh
 # Mở http://<IP-lab>:7861
@@ -382,9 +387,36 @@ Hotfix tạm (chưa pull được):
 
 ```bash
 conda activate amodal
-python -m pip install "gradio==4.44.1" "gradio_client==1.3.0" "pydantic>=2.0,<2.11"
-# trong gradio_app.py → demo.launch(..., show_api=False)
+python -m pip install \
+  "gradio==4.44.1" "gradio_client==1.3.0" \
+  "pydantic>=2.0,<2.11" "starlette>=0.37,<1.0" "fastapi>=0.111,<0.116"
+# kiểm tra: python -c "import starlette,pydantic,gradio; print(starlette.__version__, pydantic.__version__, gradio.__version__)"
+# kỳ vọng: starlette 0.3x–0.4x, pydantic 2.x (<2.11), gradio 4.44.x
 ```
+
+### `cannot import name 'SamPredictor' from 'segment_anything' (unknown location)`
+Package `segment_anything` trong env `amodal` bị hỏng/stub (che bản trong Grounded-SAM).
+
+```bash
+conda activate amodal
+source scripts/paths.env
+# nếu chưa clone sibling:
+# bash scripts/model.sh
+bash scripts/fix_amodal_deps.sh
+python -c "from segment_anything import SamPredictor, build_sam; import segment_anything as s; print(s.__file__)"
+```
+
+Hotfix tay:
+
+```bash
+conda activate amodal
+source scripts/paths.env
+python -m pip uninstall -y segment-anything segment_anything
+python -m pip install -e "$GROUNDED_SAM_REPO/segment_anything"
+# fallback: python -m pip install git+https://github.com/facebookresearch/segment-anything.git
+```
+
+Mask LISA đã cache vẫn dùng lại được — chỉ cần sửa env rồi **Run main pipeline** lại (không cần cache lại).
 
 ### `ModuleNotFoundError: No module named 'clip'`
 OpenAI CLIP phải cài riêng (`--no-build-isolation`): `bash scripts/fix_amodal_deps.sh`.

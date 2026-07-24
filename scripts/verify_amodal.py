@@ -77,7 +77,6 @@ def main() -> int:
     sibling_checks = [
         ("InstaOrder.models", "models"),
         ("GroundingDINO", "GroundingDINO.groundingdino.models"),
-        ("segment_anything", "segment_anything"),
         ("ram", "ram"),
     ]
     for label, mod in sibling_checks:
@@ -86,6 +85,16 @@ def main() -> int:
         except Exception as exc:
             errors.append(f"{label}: {exc}")
             print(f"  FAIL {label}: {exc}")
+
+    try:
+        from segment_anything import SamPredictor, build_sam  # noqa: F401
+
+        import segment_anything as _sa
+
+        print(f"  OK  segment_anything (SamPredictor) @ {_sa.__file__}")
+    except Exception as exc:
+        errors.append(f"segment_anything.SamPredictor: {exc}")
+        print(f"  FAIL segment_anything.SamPredictor: {exc}")
 
     if errors:
         print("\n[verify_amodal] FAILED:")

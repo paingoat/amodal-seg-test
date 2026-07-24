@@ -35,6 +35,9 @@ gradio==4.44.1
 gradio_client==1.3.0
 # pydantic>=2.11 emits additionalProperties:true (bool) → Gradio 4.44 API schema crash
 pydantic>=2.0,<2.11
+# starlette 1.0 changed TemplateResponse signature → Gradio 4.44 UI crash (unhashable dict)
+starlette>=0.37.0,<1.0.0
+fastapi>=0.111.0,<0.116.0
 kornia>=0.7.0
 scipy>=1.11.0
 timm>=0.9.0

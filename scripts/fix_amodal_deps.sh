@@ -27,11 +27,36 @@ python -m pip install --no-build-isolation \
   "git+https://github.com/openai/CLIP.git@d50d76daa670286dd6cacf3bcd80b5e4823fc8e1"
 
 echo "[fix_amodal_deps] Ensuring Gradio UI deps ..."
-# Gradio 4.44.1 + gradio_client 1.3.0; keep pydantic<2.11 (bool additionalProperties crash)
-python -m pip install "gradio==4.44.1" "gradio_client==1.3.0" "pydantic>=2.0,<2.11"
+# Gradio 4.44.1 stack: pydantic<2.11 (API schema) + starlette<1 (TemplateResponse)
+python -m pip install \
+  "gradio==4.44.1" \
+  "gradio_client==1.3.0" \
+  "pydantic>=2.0,<2.11" \
+  "starlette>=0.37,<1.0" \
+  "fastapi>=0.111,<0.116"
 
 echo "[fix_amodal_deps] Sibling runtime deps (GroundingDINO / InstaOrder) ..."
 python -m pip install "addict>=2.4.0" "yapf>=0.40.0" "pycocotools>=2.0.6" "supervision>=0.22.0"
+
+echo "[fix_amodal_deps] Reinstalling segment_anything (broken stub → SamPredictor missing) ..."
+# A bad/empty pip package shadows Grounded-SAM's local copy ("unknown location").
+python -m pip uninstall -y segment-anything segment_anything 2>/dev/null || true
+if [ -d "$GROUNDED_SAM_REPO/segment_anything" ]; then
+  python -m pip install -e "$GROUNDED_SAM_REPO/segment_anything"
+else
+  echo "WARN: $GROUNDED_SAM_REPO/segment_anything missing — run bash scripts/model.sh first"
+  python -m pip install "git+https://github.com/facebookresearch/segment-anything.git"
+fi
+
+if [ -d "$GROUNDED_SAM_REPO/GroundingDINO" ]; then
+  echo "[fix_amodal_deps] Ensuring GroundingDINO editable install ..."
+  python -m pip install -e "$GROUNDED_SAM_REPO/GroundingDINO" || \
+    echo "WARN: GroundingDINO editable install failed"
+fi
+if [ -d "$RAM_REPO" ]; then
+  echo "[fix_amodal_deps] Ensuring RAM editable install ..."
+  python -m pip install -e "$RAM_REPO" || echo "WARN: RAM editable install failed"
+fi
 
 echo "[fix_amodal_deps] Verifying imports ..."
 python "$AMODAL_ROOT/scripts/verify_amodal.py"
