@@ -1,0 +1,25 @@
+# Local secrets / machine paths
+.env
+.hf_token
+
+# Runtime artifacts inside the repo
+cache/
+output/
+third_party/
+
+# Symlinks created by scripts/model.sh (recreated on setup)
+/InstaOrder
+/Grounded-Segment-Anything
+/recognize-anything
+
+# Python / IDE
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

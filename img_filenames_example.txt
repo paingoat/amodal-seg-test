@@ -5,3 +5,4 @@ images_example/carlos-lugo-PfIzX6BwnZs-unsplash_icecreamcone.jpg
 images_example/cat-7875506_640_cat.jpg
 images_example/coins-1015125_640_calculator.jpg
 images_example/coins-1015125_640_potato.jpg
+images_example/viking.png

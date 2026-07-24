@@ -1,32 +1,43 @@
 #!/bin/bash
+# Example CLI batch runner (main pipeline only).
+# Prefer scripts/run_full_batch.sh for LISA → stop → main on a single GPU.
+set -euo pipefail
 
-# Path to the text file containing image filenames (one per line)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# If this file still lives at repo root, scripts/ is ./scripts
+if [ -f "$SCRIPT_DIR/scripts/paths.env" ]; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/scripts/paths.env"
+  ROOT="$SCRIPT_DIR"
+else
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/paths.env"
+  ROOT="$AMODAL_ROOT"
+fi
+
+cd "$ROOT"
+
 img_filenames_txt="./img_filenames_example.txt"
+INPUT_DIR="${INPUT_DIR:-$ROOT}"
+OUTPUT_DIR="${OUTPUT_DIR:-$AMODAL_ROOT/output}"
+JSON_LABEL_PATH="${JSON_LABEL_PATH:-./example_annotation.json}"
+ROUND_NUMBER="${ROUND_NUMBER:-5}"
 
-# Count the number of lines (i.e., images) in the file
 line_count=$(wc -l < "$img_filenames_txt")
 
-# Process images in batches of 5
-for line_num in $(seq 0 5 $line_count); do
+for line_num in $(seq 0 "$ROUND_NUMBER" "$line_count"); do
     echo "Processing batch starting from line: $line_num"
 
-    # Run the main amodal completion pipeline
     python main.py \
-        --input_dir /your/path/here/ \          # Directory containing input images
-        --img_filenames_txt "$img_filenames_txt" \                        # List of image filenames to process
-        --json_label_path ./example_annotation.json \  # JSON annotations for labels
-        --output_dir ./output_path \                                     # Output directory
-        --line_num "$line_num"                                            # Starting line index in filename list
+        --input_dir "$INPUT_DIR" \
+        --img_filenames_txt "$img_filenames_txt" \
+        --json_label_path "$JSON_LABEL_PATH" \
+        --output_dir "$OUTPUT_DIR" \
+        --lisa_mask_dir "$LISA_OUTPUT_PATH" \
+        --skip_lisa_server \
+        --require_lisa_cache \
+        --line_num "$line_num" \
+        --round_number "$ROUND_NUMBER"
 
-    # Note: Uncomment and customize below if you want to override prompt manually for all images
-    # --text_query "What is the TV remote control in this image" \
-    # --inpaint_prompt "a TV remote control"
-
-    # Get the process ID and wait for it to finish
-    pid=$!
-    wait $pid
-
-    # Kill the process explicitly (to avoid memory leakage if needed)
-    kill -9 $pid
-    echo "Process $pid killed."
+    echo "Batch starting at $line_num finished."
 done

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Launch the full-pipeline Gradio UI on port 7861 (amodal env).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/paths.env"
+
+eval "$(conda shell.bash hook)"
+conda activate "$AMODAL_ENV_NAME"
+cd "$AMODAL_ROOT"
+
+export HF_HOME HUGGINGFACE_HUB_CACHE TRANSFORMERS_CACHE HF_DATASETS_CACHE
+export LISA_OUTPUT_PATH LISA_SERVER_URL AMODAL_ROOT OUTPUT_DIR
+if [ -n "${HF_TOKEN:-}" ]; then
+  export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN"
+fi
+
+echo "[start_gradio] http://0.0.0.0:${GRADIO_PIPELINE_PORT}  (LISA must use ${LISA_SERVER_PORT})"
+python gradio_app.py --port "$GRADIO_PIPELINE_PORT"

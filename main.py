@@ -16,25 +16,16 @@ import shutil
 import gc
 import time
 import pickle
-import yaml
 import re
 import math
-import glob
-import subprocess
-import requests
 import warnings
 warnings.filterwarnings("ignore")
 
 from tqdm import tqdm
-from skimage import measure
-from skimage.morphology import dilation, square, erosion, disk
-from skimage.draw import polygon
-from PIL import Image, ImageFilter, ImageChops, ImageOps
+from skimage.morphology import erosion, disk
+from PIL import Image
 from gradio_client import Client
 from diffusers import StableDiffusionInpaintPipeline
-from omegaconf import OmegaConf
-from saicinpainting.training.trainers import load_checkpoint
-from lama.bin.predict_for_mc import *
 import clip
 
 # InstaOrder
@@ -54,7 +45,7 @@ from GroundingDINO.groundingdino.util.utils import clean_state_dict, get_phrases
 
 # Segment Anything
 # https://github.com/facebookresearch/segment-anything
-from segment_anything import build_sam, SamPredictor 
+from segment_anything import build_sam, SamPredictor
 
 # RAM
 # https://github.com/xinyu1205/recognize-anything
@@ -62,16 +53,53 @@ from ram.models import ram_plus
 from ram import inference_ram as inference
 from ram import get_transform
 
-# Global paths for customization
-LISA_SERVER_URL = "http://127.0.0.1:7860/"  # Modify LISA server URL here, use the URL from "Running on local URL..."
-PROJECT_PATH = "/your/path/here/"  # Modify Hugging Face cache path here
-LISA_OUTPUT_PATH = "/your/path/here/LISAoutput/"  # Modify LISA output path here
+# ---------------------------------------------------------------------------
+# Paths / HF cache (repo-root layout + optional .env)
+# ---------------------------------------------------------------------------
+_REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 
-#Hugging Face cache path
-os.environ["HF_DATASETS_CACHE"] = PROJECT_PATH
-os.environ["HF_HOME"] = PROJECT_PATH
-os.environ["HUGGINGFACE_HUB_CACHE"] = PROJECT_PATH
-os.environ["TRANSFORMERS_CACHE"] = PROJECT_PATH
+
+def _load_dotenv(path: str) -> None:
+    """Minimal KEY=VALUE loader; does not override existing os.environ keys."""
+    if not os.path.isfile(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip().lstrip("\ufeff")
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+    except OSError:
+        pass
+
+
+_load_dotenv(os.path.join(_REPO_ROOT, ".env"))
+
+AMODAL_ROOT = os.environ.get("AMODAL_ROOT", _REPO_ROOT)
+LISA_SERVER_URL = os.environ.get("LISA_SERVER_URL", "http://127.0.0.1:7860/")
+LISA_OUTPUT_PATH = os.environ.get(
+    "LISA_OUTPUT_PATH", os.path.join(AMODAL_ROOT, "cache", "lisa_masks")
+)
+# Large-disk HF cache (set HF_HOME in .env; default matches lab backup volume)
+HF_HOME = os.environ.get("HF_HOME", "/backup/data/art-gen")
+SD_MODEL_ID_DEFAULT = os.environ.get(
+    "SD_MODEL_ID", "sd2-community/stable-diffusion-2-inpainting"
+)
+
+os.environ.setdefault("HF_HOME", HF_HOME)
+os.environ.setdefault("HF_DATASETS_CACHE", os.path.join(HF_HOME, "datasets"))
+os.environ.setdefault("HUGGINGFACE_HUB_CACHE", os.path.join(HF_HOME, "hub"))
+os.environ.setdefault("TRANSFORMERS_CACHE", os.path.join(HF_HOME, "transformers"))
+os.makedirs(LISA_OUTPUT_PATH, exist_ok=True)
+
+# Reused SAM predictor (avoids reloading ViT-H every call)
+_SAM_PREDICTOR = None
+_SAM_CKPT_LOADED = None
 
 
 class QueryObject:
@@ -95,22 +123,28 @@ def parse_args():
     parser.add_argument('--json_label_path',   type=str,  default="./img_annotation.json")
     parser.add_argument('--output_dir',        type=str,  default="./output")
     
-    # Grounding DINO, SAM, InstaOrder
-    parser.add_argument('--gdino_config',      type=str,  default="Grounded-Segment-Anything/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py")
-    parser.add_argument('--gdino_ckpt',        type=str,  default="Grounded-Segment-Anything/groundingdino_swint_ogc.pth")
-    parser.add_argument('--sam_ckpt',          type=str,  default="Grounded-Segment-Anything/sam_vit_h_4b8939.pth")
-    parser.add_argument('--instaorder_ckpt',   type=str,  default="InstaOrder/InstaOrder_ckpt/InstaOrder_InstaOrderNet_od.pth.tar")
+    # Grounding DINO, SAM, InstaOrder, RAM
+    parser.add_argument('--gdino_config',      type=str,  default=os.environ.get("GDINO_CONFIG", "Grounded-Segment-Anything/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py"))
+    parser.add_argument('--gdino_ckpt',        type=str,  default=os.environ.get("GDINO_CKPT", "Grounded-Segment-Anything/groundingdino_swint_ogc.pth"))
+    parser.add_argument('--sam_ckpt',          type=str,  default=os.environ.get("SAM_CKPT", "Grounded-Segment-Anything/sam_vit_h_4b8939.pth"))
+    parser.add_argument('--instaorder_ckpt',   type=str,  default=os.environ.get("INSTAORDER_CKPT", "InstaOrder/InstaOrder_ckpt/InstaOrder_InstaOrderNet_od.pth.tar"))
+    parser.add_argument('--ram_ckpt',          type=str,  default=os.environ.get("RAM_CKPT", "./recognize-anything/ram_plus_swin_large_14m.pth"))
+
+    parser.add_argument('--sd_model_id',       type=str,  default=SD_MODEL_ID_DEFAULT, help='HF repo id for SD2 inpainting')
+    parser.add_argument('--sd_cpu_offload',    action='store_true', help='Enable Diffusers model CPU offload (lower VRAM, slower)')
     
-    # LaMa: configuration and checkpoint paths (not used currently, but kept for future use)
-    parser.add_argument('--lama_config_path',  type=str,  default="lama/big-lama/config.yaml")
-    parser.add_argument('--lama_ckpt_path',    type=str,  default="lama/big-lama/models/best.ckpt")
-    
+    parser.add_argument('--lisa_server_url',   type=str,  default=LISA_SERVER_URL)
+    parser.add_argument('--lisa_mask_dir',     type=str,  default=LISA_OUTPUT_PATH, help='Directory of cached LISA mask pickles')
+    parser.add_argument('--skip_lisa_server',  action='store_true', help='Only use cached LISA masks; never call Gradio server')
+    parser.add_argument('--require_lisa_cache', action='store_true', help='Fail if mask pickle missing (recommended after LISA batch stage)')
+
     parser.add_argument('--save_interm',       type=bool, default=True, help='Whether to save intermediate images')
     parser.add_argument('--max_iter_id',       type=int,  default=3,    help='Maximum number of pipeline iterations')
     parser.add_argument('--mc_clean_bkgd_img', type=str,  default="images/gray_wallpaper.jpeg", help='Path to clean background image')
     parser.add_argument('--text_query',        type=str,  default="main object", help='Text query input from user.')
     parser.add_argument('--inpaint_prompt',    type=str,  default="main object", help='Inpainting prompt')
-    parser.add_argument('--line_num',    type=int,  default=5, help='line_num')
+    parser.add_argument('--line_num',          type=int,  default=0, help='Starting line index in filename list')
+    parser.add_argument('--round_number',      type=int,  default=5, help='Images per process launch')
     return parser.parse_args()
 
 
@@ -131,9 +165,10 @@ def find_mask_sides(mask, val=1):
     return x_min, x_max, y_min, y_max
 
 
-def load_models(gdino_config, gdino_ckpt, instaorder_ckpt=None, lama_config_path=None, lama_ckpt_path=None, device="cuda"):
+def load_models(gdino_config, gdino_ckpt, instaorder_ckpt=None, sd_model_id=None, sd_cpu_offload=False, device="cuda"):
     """
-    Load Grounding DINO, Stable Diffusion inpainter, InstaOrder, and LaMa inpainter
+    Load Grounding DINO, Stable Diffusion inpainter, and InstaOrder.
+    LaMa is intentionally omitted (unused by the original pipeline at runtime).
     """
     loaded_models = []
 
@@ -141,17 +176,22 @@ def load_models(gdino_config, gdino_ckpt, instaorder_ckpt=None, lama_config_path
     gdino_args = SLConfig.fromfile(gdino_config)
     gdino_args.device = device
     gdino_model = build_model(gdino_args)
-    gdino_ckpt = torch.load(gdino_ckpt, map_location="cpu")
+    gdino_ckpt = torch.load(gdino_ckpt, map_location="cpu", weights_only=False)
     gdino_model.load_state_dict(clean_state_dict(gdino_ckpt["model"]), strict=False)
     gdino_model.eval()
     loaded_models.append(gdino_model)
 
+    sd_id = sd_model_id or SD_MODEL_ID_DEFAULT
     sd_inpaint_model = StableDiffusionInpaintPipeline.from_pretrained(
-        "stabilityai/stable-diffusion-2-inpainting",
+        sd_id,
         torch_dtype=torch.float16,
+        safety_checker=None,
     )
     sd_inpaint_model.enable_attention_slicing()
-    sd_inpaint_model = sd_inpaint_model.to("cuda")
+    if sd_cpu_offload:
+        sd_inpaint_model.enable_model_cpu_offload()
+    else:
+        sd_inpaint_model = sd_inpaint_model.to("cuda")
     loaded_models.append(sd_inpaint_model)
 
     # InstaOrder, default parameters from InstaOrderNet_od
@@ -177,19 +217,16 @@ def load_models(gdino_config, gdino_ckpt, instaorder_ckpt=None, lama_config_path
         instaorder_model.switch_to('eval')
         loaded_models.append(instaorder_model)
 
-    # Note: LaMa is not used in the current pipeline, but it remains available for future extensions.
-    if lama_config_path is not None and lama_ckpt_path is not None:
-        with open(lama_config_path, 'r') as f:
-            train_config = OmegaConf.create(yaml.safe_load(f))
-        train_config.training_model.predict_only = True
-        train_config.visualizer.kind = 'noop'
-
-        lama_model = load_checkpoint(train_config, lama_ckpt_path, strict=False, map_location='cpu')
-        lama_model.freeze()
-        lama_model.to(device)
-        loaded_models.append(lama_model)
-
     return loaded_models
+
+
+def get_sam_predictor(sam_ckpt, device="cuda"):
+    """Reuse a single SAM predictor across calls to avoid repeated ViT-H loads."""
+    global _SAM_PREDICTOR, _SAM_CKPT_LOADED
+    if _SAM_PREDICTOR is None or _SAM_CKPT_LOADED != sam_ckpt:
+        _SAM_PREDICTOR = SamPredictor(build_sam(checkpoint=sam_ckpt).to(device))
+        _SAM_CKPT_LOADED = sam_ckpt
+    return _SAM_PREDICTOR
 
 
 def transform_image(img_pil, save_interm=False, output_img_dir=None):
@@ -242,7 +279,7 @@ def run_gdino(gdino_model, img, caption, box_thresh=0.35, text_thresh=0.35, with
 
 def run_sam(img_pil, sam_ckpt, boxes_filt, pred_phrases=None, device="cuda"):
     img = np.array(img_pil)
-    predictor = SamPredictor(build_sam(checkpoint=sam_ckpt).to(device))
+    predictor = get_sam_predictor(sam_ckpt, device=device)
     predictor.set_image(img)
 
     # Predict SAM masks
@@ -624,7 +661,6 @@ def run_iteration(
     sam_ckpt,
     instaorder_model,
     sd_inpaint_model,
-    lama_model,
     mc_clean_bkgd_img,
     sd_target_size=512,
     save_interm=True,  # Whether to save intermediate images
@@ -799,13 +835,68 @@ def remove_duplicates(input_list):
     return result
 
 
-def run_pipeline(args,read_img_filenames, range_len, round_number):
-    gdino_model, sd_inpaint_model, instaorder_model, lama_model = load_models(
-        args.gdino_config, args.gdino_ckpt, args.instaorder_ckpt, args.lama_config_path, args.lama_ckpt_path)
+def lisa_mask_pickle_path(lisa_mask_dir, img_filename):
+    """Stable path for a cached LISA mask pickle given an image filename."""
+    stem = img_filename.split(".")[0]
+    # Preserve nested relative dirs under the cache root
+    return os.path.join(lisa_mask_dir, f"{stem}.pkl")
+
+
+def load_or_query_lisa_mask(args, img_path, img_filename, text_query, output_img_dir):
+    """
+    Prefer cached LISA mask pickle (after batch stage). Optionally fall back to live Gradio server.
+    Returns numpy mask array.
+    """
+    pickle_path = lisa_mask_pickle_path(args.lisa_mask_dir, img_filename)
+    os.makedirs(os.path.dirname(pickle_path) or ".", exist_ok=True)
+
+    if os.path.isfile(pickle_path):
+        print(f"[LISA] Using cached mask: {pickle_path}")
+        with open(pickle_path, "rb") as f:
+            mask = pickle.load(f)
+        mask = np.array(mask)
+        # Optional overlay copy for debugging
+        visible_seg_path = os.path.join(output_img_dir, "visible_seg.png")
+        if not os.path.exists(visible_seg_path):
+            # Write a simple grayscale visualization
+            Image.fromarray((mask.astype(np.uint8) * 255)).save(visible_seg_path)
+        return mask
+
+    if args.skip_lisa_server or args.require_lisa_cache:
+        raise FileNotFoundError(
+            f"LISA mask cache missing for {img_filename}: {pickle_path}. "
+            "Run scripts/run_lisa_batch.py then scripts/stop_lisa.sh before main."
+        )
+
+    print(f"[LISA] Cache miss — calling server {args.lisa_server_url}")
+    client = Client(args.lisa_server_url)
+    resultclient = client.predict(text_query, img_path, api_name="/predict")
+    with open(resultclient[1], "r") as file_from_json:
+        pre_maskdata = json.load(file_from_json)
+    mask = np.array(pre_maskdata["data"])
+
+    visible_seg_path = os.path.join(output_img_dir, "visible_seg.png")
+    shutil.copyfile(resultclient[0], visible_seg_path)
+
+    with open(pickle_path, "wb") as f:
+        pickle.dump(mask, f)
+    print(f"[LISA] Saved mask cache: {pickle_path}")
+    return mask
+
+
+def run_pipeline(args, read_img_filenames, range_len, round_number):
+    gdino_model, sd_inpaint_model, instaorder_model = load_models(
+        args.gdino_config,
+        args.gdino_ckpt,
+        args.instaorder_ckpt,
+        sd_model_id=args.sd_model_id,
+        sd_cpu_offload=args.sd_cpu_offload,
+    )
 
     img_filenames = read_img_filenames
 
     os.makedirs(args.output_dir, exist_ok=True)
+    os.makedirs(args.lisa_mask_dir, exist_ok=True)
 
     with open(args.json_label_path, 'r') as f:
         jsonlabel_data = json.load(f)
@@ -825,7 +916,7 @@ def run_pipeline(args,read_img_filenames, range_len, round_number):
     transform_classes = get_transform(image_size=384)
     
     # Load ram_plus model
-    remodel = ram_plus(pretrained='./recognize-anything/ram_plus_swin_large_14m.pth',image_size=384,vit='swin_l')
+    remodel = ram_plus(pretrained=args.ram_ckpt, image_size=384, vit='swin_l')
     # the threshold for unseen categories is often lower
     remodel.class_threshold = torch.ones(remodel.num_class) * 0.6
     remodel.eval()
@@ -878,40 +969,27 @@ def run_pipeline(args,read_img_filenames, range_len, round_number):
 
         args.text_query = imgname_prompt_map[img_basename]
 
-        # run the VLM, LISA 
-        client = Client(LISA_SERVER_URL)   ### change ip from "Running on local URL..."
-        print("query text:", args.text_query)
-        print('img_path:',img_path)
-        resultclient = client.predict(
-                        args.text_query,	# str in 'Text Instruction' Textbox component
-                        img_path, #"https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png",	# str (filepath on your computer (or URL) of image) in 'Input Image' Image component
-                        api_name="/predict"
-        )
-        
-        # Opening JSON file
-        file_from_json = open(resultclient[1])
-        # returns JSON object as a dictionary
-        pre_maskdata = json.load(file_from_json)
-        
-        visible_seg_path = f"{output_img_dir}/visible_seg.png"
-        # Save the VLM segmentation result
-        shutil.copyfile(resultclient[0], visible_seg_path)
-
-        # IF the VLM segmentation result is empty, then skip the image
-        if not os.path.exists(visible_seg_path):
-            print("Visible mask not found, skipping image")
+        # LISA: prefer disk cache (batch stage); optional live Gradio fallback
+        try:
+            lisa_mask = load_or_query_lisa_mask(
+                args, img_path, img_filename, args.text_query, output_img_dir
+            )
+        except FileNotFoundError as exc:
+            print(exc)
             continue
-        
-        pickle_path = LISA_OUTPUT_PATH +img_filename.split('.')[0]+'.pl'
-        print('pickle_path:',pickle_path)
-        file_open=open(pickle_path,'wb')
-        pickle.dump(np.array(pre_maskdata['data']),file_open)
-        file_open.close()
+        except Exception as exc:
+            print(f"[LISA] Failed for {img_filename}: {exc}")
+            continue
 
+        if lisa_mask is None or np.asarray(lisa_mask).size == 0:
+            print("Visible mask empty, skipping image")
+            continue
+
+        pre_maskdata_arr = np.array(lisa_mask)
 
         #Use Clip to decide inpaint prompt 
-        # Assuming pre_maskdata['data'] contains 0s and 1s, where 1s indicate the mask regions
-        pre_maskdata_npmask = np.array(pre_maskdata['data'], dtype=bool)
+        # Assuming mask contains 0s and 1s, where 1s indicate the mask regions
+        pre_maskdata_npmask = np.array(pre_maskdata_arr, dtype=bool)
         target_image_np = np.array(img_pil)
 
         # Apply the mask to each color channel
@@ -932,8 +1010,8 @@ def run_pipeline(args,read_img_filenames, range_len, round_number):
             print("No object masks detected, skipping image") 
             continue  # If no masks are detected, then proceed to the next image
 
-        query_obj = QueryObject(img_path, img, img_pil, len(masks), np.array(pre_maskdata['data']), output_img_dir)
-        masks = np.append(masks, [np.array(pre_maskdata['data'])], axis=0)
+        query_obj = QueryObject(img_path, img, img_pil, len(masks), pre_maskdata_arr, output_img_dir)
+        masks = np.append(masks, [pre_maskdata_arr], axis=0)
         select_class_name = args.inpaint_prompt
         class_names.append(select_class_name)   # class name of the query object
         pred_scores.append(float(1))
@@ -968,7 +1046,6 @@ def run_pipeline(args,read_img_filenames, range_len, round_number):
                 args.sam_ckpt,
                 instaorder_model,
                 sd_inpaint_model,
-                lama_model,
                 args.mc_clean_bkgd_img,
                 save_interm=args.save_interm,
             )
@@ -1061,11 +1138,11 @@ def handlemask(img, masks, class_names):
 
 
 def img_blend(amodal_completions_masked_dir, mask_id):
-    #Get the first part of path of amodal_completions_masked_dir
-    amodal_completions_dir = '/'.join(amodal_completions_masked_dir.split('/')[:-1]) 
+    # Parent of amodal_completions_processed is the per-image output dir
+    amodal_completions_dir = os.path.dirname(amodal_completions_masked_dir)
 
     # Blend the amodal completion RGBA image with the original RGBA image
-    visible_obj_img_path = os.path.join(PROJECT_PATH, amodal_completions_dir, f'sd_img_cut.png')       
+    visible_obj_img_path = os.path.join(amodal_completions_dir, f'sd_img_cut.png')
     inpainted_img_path = os.path.join(amodal_completions_masked_dir, f'_{mask_id}.png')
 
     # Load the images as RGBA
@@ -1080,7 +1157,7 @@ def img_blend(amodal_completions_masked_dir, mask_id):
  
     blended_img = alpha_blending(shrink_edges_to_transparent(src_im), dst_im)
 
-    blended_img_path = os.path.join(PROJECT_PATH, amodal_completions_dir, f'amodal_completion.png')
+    blended_img_path = os.path.join(amodal_completions_dir, f'amodal_completion.png')
     cv2.imwrite(blended_img_path, blended_img)
 
     # Load the images
@@ -1232,7 +1309,9 @@ def clean_up_intermediate_results(output_img_dir):
 
 if __name__ == '__main__':
     args = parse_args()
+    if not args.input_dir:
+        raise SystemExit("--input_dir is required")
     read_img_filenames = read_txt(args.img_filenames_txt)
-    round_number = 5
+    round_number = args.round_number
     print('current img files:', read_img_filenames[args.line_num:args.line_num+round_number])
-    run_pipeline(args,read_img_filenames[args.line_num:args.line_num+round_number],args.line_num,round_number)
+    run_pipeline(args, read_img_filenames[args.line_num:args.line_num+round_number], args.line_num, round_number)

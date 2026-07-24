@@ -40,30 +40,37 @@ Overview of our framework. Starting with a text query, a VLM generates a visible
 ## Usage
 This repository provides the implementation of our Open-World Amodal Appearance Completion pipeline. The core logic resides in `main.py`.
 
-### 1. Set up Environment
-Python: 3.10.14
+> **Lab setup (Ubuntu + RTX 5090 / CUDA 13.2):** see **[GUIDE.md](GUIDE.md)** (Vietnamese).  
+> Workspace = **this repo root**; sibling clones go under `third_party/`; create **`.env`** from `.env.example` and set `HF_HOME` (default `/backup/data/art-gen`). Scripts: `scripts/`.
 
-PyTorch: 1.13.1+cu117
+### 1. Set up Environment
+**Recommended (RTX 5090):** Python 3.11, PyTorch 2.13.0+cu132 — use `scripts/env.sh` (creates envs `amodal` + `lisa`).
+
+Legacy paper pins (not compatible with Blackwell): Python 3.10.14 / PyTorch 1.13.1+cu117.
 
 Install dependencies via:
 
 ```bash
-pip install -r requirements.txt
+source scripts/paths.env
+bash scripts/env.sh
+# or manually: pip install -r requirements.txt  (after installing torch from cu132 index)
 ```
 ### 2. Set up and Download the pre-trained models:
-The pipeline uses several pre-trained models. 
+Prefer `bash scripts/model.sh`. Manual checklist:
 
 1. ***LISA*** (mapping textual queries to visible object regions): Clone and install from [official LISA repository](https://github.com/dvlab-research/LISA). Download the checkpoint [LISA-13B-llama2-v1](https://huggingface.co/xinlai/LISA-13B-llama2-v1) from Hugging Face.
 
-   **⚠️ Replace the original LISA/app.py**  with [our modified version](https://github.com/saraao/amodal/blob/main/LISA/app.py) in this repository. This modified version introduces minimal changes to [line 310](https://github.com/saraao/amodal/blob/main/LISA/app.py#L310) and [line 322](https://github.com/saraao/amodal/blob/main/LISA/app.py#L322) to return the raw segmentation mask (pred_mask) for integration with our pipeline.
+   **⚠️ Replace the original LISA/app.py**  with [our modified version](./LISA/app.py) in this repository. This modified version returns the raw segmentation mask (`pred_mask`) for integration with our pipeline and binds Gradio to port **7860**.
 
-We access LISA via API to avoid dependency conflicts. Run the LISA server locally, and update [`LISA_SERVER_URL`](https://github.com/saraao/amodal/blob/main/main.py#L66) in `main.py` accordingly.
+We access LISA via API to avoid dependency conflicts. On a **single 32GB GPU**, run LISA in a **batch stage**, cache masks, **stop the server**, then run `main.py` / Gradio (see GUIDE.md).
 
 2. ***InstaOrder*** (for occlusion relationships): Clone and install from the [InstaOrder repository](https://github.com/POSTECH-CVLab/InstaOrder), download the checkpoint `InstaOrder_InstaOrderNet_od.pth.tar`.
 
 3. ***RAM-Grounded-SAM***: Install RAM++ following the instructions from the [official recognize-anything repository](https://github.com/xinyu1205/recognize-anything), download the checkpoint `ram_plus_swin_large_14m.pth`. Install Grounded-SAM following the instructions from the [official Grounded-Segment-Anything repository](https://github.com/IDEA-Research/Grounded-Segment-Anything), download the checkpoint `groundingdino_swint_ogc.pth` and `sam_vit_h_4b8939.pth`.
 
-4. ***Stable Diffusion*** (for inpainting): [Stable Diffusion v2 inpainting model](https://huggingface.co/stabilityai/stable-diffusion-2-inpainting).
+4. ***Stable Diffusion*** (for inpainting): community mirror [sd2-community/stable-diffusion-2-inpainting](https://huggingface.co/sd2-community/stable-diffusion-2-inpainting) (replacement for the deprecated Stability AI repo).
+
+**Note:** LaMa is **not** required or loaded in this fork (it was unused at runtime in the original pipeline).
 
 ### 3. Prepare Inputs
 
@@ -76,7 +83,17 @@ To run the pipeline, you need to prepare the following input files:
 
 ### 4. Run the Pipeline
 
-To process images in batches (e.g., 5 images at a time), you can use the provided script `main_batch_example.sh`.
+**Recommended single-GPU flow:**
+
+```bash
+source scripts/paths.env
+bash scripts/start_lisa.sh          # terminal 1
+python scripts/run_lisa_batch.py ...  # terminal 2 / or use scripts/run_full_batch.sh
+bash scripts/stop_lisa.sh
+bash main_batch_example.sh          # or: bash scripts/start_gradio.sh  (port 7861)
+```
+
+CLI is preserved (`main.py`, `main_batch_example.sh`). Gradio UI: `bash scripts/start_gradio.sh`.
 
 ## Dataset 
 

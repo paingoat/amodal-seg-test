@@ -134,16 +134,22 @@ elif (
 ):
     vision_tower = model.get_model().get_vision_tower()
     model.model.vision_tower = None
-    import deepspeed
+    try:
+        import deepspeed
 
-    model_engine = deepspeed.init_inference(
-        model=model,
-        dtype=torch.half,
-        replace_with_kernel_inject=True,
-        replace_method="auto",
-    )
-    model = model_engine.module
-    model.model.vision_tower = vision_tower.half().cuda()
+        model_engine = deepspeed.init_inference(
+            model=model,
+            dtype=torch.half,
+            replace_with_kernel_inject=True,
+            replace_method="auto",
+        )
+        model = model_engine.module
+        model.model.vision_tower = vision_tower.half().cuda()
+    except Exception as exc:
+        # Fallback for newer torch / Blackwell where DeepSpeed kernel inject may fail
+        print(f"[LISA] DeepSpeed init_inference failed ({exc}); using plain fp16 .cuda()")
+        model.model.vision_tower = vision_tower
+        model = model.half().cuda()
 elif args.precision == "fp32":
     model = model.float().cuda()
 
@@ -330,4 +336,6 @@ demo = gr.Interface(
 )
 
 demo.queue()
-demo.launch()
+# Fixed port for the amodal pipeline client (do not collide with Gradio UI on 7861)
+_server_port = int(os.environ.get("LISA_SERVER_PORT", "7860"))
+demo.launch(server_name="0.0.0.0", server_port=_server_port)

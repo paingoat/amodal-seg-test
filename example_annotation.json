@@ -9,7 +9,7 @@
         {
             "filename": "images_example/bird-8951872_640_bird.jpg",
             "labels": [
-                "bird" 
+                "bird"
             ]
         },
         {
@@ -35,21 +35,26 @@
             "labels": [
                 "calculator"
             ]
-        },        
+        },
         {
             "filename": "images_example/coins-1015125_640_potato.jpg",
             "labels": [
                 "potato"
             ]
         },
+        {
+            "filename": "images_example/viking.png",
+            "labels": [
+                "axe"
+            ]
+        }
     ],
     "statistics": {
-        "total_filenames": 6,
-        "total_labels": 7,
-        "average_labels_per_filename": 1.16666666667,
+        "total_filenames": 8,
+        "total_labels": 8,
+        "average_labels_per_filename": 1.0,
         "label_count_distribution": {
-            "1": 5,
-            "2": 1
+            "1": 8
         }
     }
 }
