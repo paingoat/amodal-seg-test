@@ -82,6 +82,11 @@ echo "[fix_groundingdino_ops] TORCH_CUDA_ARCH_LIST=$TORCH_CUDA_ARCH_LIST"
 python -c "import torch; print(f'torch={torch.__version__} torch.version.cuda={torch.version.cuda}'); print(f'cuda_available={torch.cuda.is_available()}')"
 
 python -m pip install -q ninja
+# PyTorch>=2.1 removed Tensor.type() in AT_DISPATCH; patch before compile.
+python "$SCRIPT_DIR/patch_groundingdino_torch213_cuda.py"
+# Also keep pure-PyTorch fallback for runtime if compiled ops fail to import.
+python "$SCRIPT_DIR/patch_groundingdino_pytorch_attn.py" || true
+
 cd "$GDINO_REPO"
 python setup.py clean --all || true
 python setup.py build_ext --inplace

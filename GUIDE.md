@@ -459,6 +459,23 @@ bash scripts/start_gradio.sh
 Không downgrade PyTorch xuống CUDA 12.0: toolkit 12.0 **không** hỗ trợ
 Blackwell `sm_120` (RTX 5090). Mask LISA cũ vẫn dùng lại được.
 
+Nếu build `_C` báo `DeprecatedTypeProperties` / `value.type()` với
+PyTorch 2.13: code GroundingDINO cũ. Script đã patch tự động
+(`value.scalar_type()`). Pull rồi chạy lại:
+
+```bash
+export CUDA_HOME=/usr/local/cuda-13.2
+export PATH="$CUDA_HOME/bin:$PATH"
+bash scripts/fix_groundingdino_ops.sh
+```
+
+Hoặc bỏ qua compile, dùng fallback:
+
+```bash
+python scripts/patch_groundingdino_pytorch_attn.py
+bash scripts/start_gradio.sh
+```
+
 ### `ModuleNotFoundError: No module named 'fairscale'`
 RAM (`recognize-anything`) cần `fairscale`:
 
