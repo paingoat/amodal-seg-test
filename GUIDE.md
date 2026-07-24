@@ -418,6 +418,16 @@ bash scripts/start_gradio.sh
 
 Mask LISA đã cache vẫn dùng lại — không cần Start LISA / cache lại.
 
+### `ModuleNotFoundError: No module named 'fairscale'`
+RAM (`recognize-anything`) cần `fairscale`:
+
+```bash
+conda activate amodal
+python -m pip install "fairscale>=0.4.13"
+# hoặc: bash scripts/fix_amodal_deps.sh
+python -c "import main; print('OK')"
+```
+
 ### `ModuleNotFoundError: No module named 'clip'`
 OpenAI CLIP phải cài riêng (`--no-build-isolation`): `bash scripts/fix_amodal_deps.sh`.
 
@@ -445,6 +455,33 @@ lsof -iTCP:7861 -sTCP:LISTEN
 
 ### HF 401 / rate limit
 Kiểm tra `.env` (`HF_TOKEN`, `HF_HOME=/backup/data/art-gen`).
+
+### Checkpoint 0 byte / `InstaOrder` treo khi load / `verify_checkpoints` FAIL
+Download hỏng (URL GitHub release InstaOrder 404) để lại file **0 byte**. `start_gradio.sh` giờ chạy `scripts/verify_checkpoints.py` trước khi launch.
+
+```bash
+conda activate amodal
+source scripts/paths.env
+# xem file hỏng:
+du -h "$INSTAORDER_CKPT" "$SAM_CKPT" "$GDINO_CKPT" "$RAM_CKPT"
+# xóa stub + tải lại (InstaOrder qua Google Drive / gdown)
+rm -f -- "$INSTAORDER_CKPT"
+bash scripts/model.sh
+python scripts/verify_checkpoints.py
+bash scripts/start_gradio.sh
+```
+
+Tải tay InstaOrderNet_od (nếu `model.sh` fail):
+
+```bash
+conda activate amodal
+source scripts/paths.env
+python -m pip install -q "gdown>=5.0"
+python -m gdown --fuzzy \
+  "https://drive.google.com/uc?id=1QLikFxNOEW1Ld2oAZff8mL26FO4Mwwpv" \
+  -O "$INSTAORDER_CKPT"
+du -h "$INSTAORDER_CKPT"   # phải >> 0 (thường ~100MB+)
+```
 
 ### Thiếu mask `.pkl`
 Chưa chạy bước cache LISA, hoặc đã stop sớm. Xem `cache/lisa_masks/`.

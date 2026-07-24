@@ -16,5 +16,13 @@ if [ -n "${HF_TOKEN:-}" ]; then
   export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN"
 fi
 
+echo "[start_gradio] Checking checkpoints ..."
+python "$SCRIPT_DIR/verify_checkpoints.py" || {
+  echo "[start_gradio] Abort: fix checkpoints first (0-byte files are common after a bad download)."
+  echo "  rm -f -- \"$INSTAORDER_CKPT\""
+  echo "  bash scripts/model.sh"
+  exit 1
+}
+
 echo "[start_gradio] http://0.0.0.0:${GRADIO_PIPELINE_PORT}  (LISA must use ${LISA_SERVER_PORT})"
 python gradio_app.py --port "$GRADIO_PIPELINE_PORT"

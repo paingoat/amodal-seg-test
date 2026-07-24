@@ -46,20 +46,80 @@ clone_if_needed() {
   fi
 }
 
+# download_file URL OUT [MIN_BYTES]
+# Rejects empty / tiny files (failed downloads often leave 0-byte stubs).
 download_file() {
   local url="$1"
   local out="$2"
+  local min_bytes="${3:-1048576}"  # 1 MiB default
   if [ -f "$out" ]; then
-    echo "[model] Exists: $out"
-    return
+    local sz
+    sz="$(wc -c <"$out" | tr -d '[:space:]')"
+    if [ "$sz" -ge "$min_bytes" ]; then
+      echo "[model] Exists: $out ($sz bytes)"
+      return 0
+    fi
+    echo "[model] Removing undersized stub ($sz < $min_bytes bytes): $out"
+    rm -f "$out"
   fi
   mkdir -p "$(dirname "$out")"
   echo "[model] Downloading $url"
+  local tmp="${out}.partial"
+  rm -f "$tmp"
   if have_cmd wget; then
-    wget -O "$out" "$url"
+    wget -O "$tmp" "$url"
   else
-    curl -L -o "$out" "$url"
+    curl -L --fail -o "$tmp" "$url"
   fi
+  local sz
+  sz="$(wc -c <"$tmp" | tr -d '[:space:]')"
+  if [ ! -f "$tmp" ] || [ "$sz" -lt "$min_bytes" ]; then
+    echo "ERROR: download too small ($sz bytes, need ≥ $min_bytes): $url"
+    rm -f "$tmp"
+    return 1
+  fi
+  mv -f "$tmp" "$out"
+  echo "[model] Saved: $out ($sz bytes)"
+}
+
+# InstaOrderNet_od — GitHub "releases/v1.0" URL 404s; use Drive (SNU mirror of od weights).
+download_instaorder_ckpt() {
+  local out="$INSTAORDER_CKPT"
+  local min_bytes=52428800  # 50 MiB
+  mkdir -p "$(dirname "$out")"
+  if [ -f "$out" ]; then
+    local sz
+    sz="$(wc -c <"$out" | tr -d '[:space:]')"
+    if [ "$sz" -ge "$min_bytes" ]; then
+      echo "[model] Exists: $out ($sz bytes)"
+      return 0
+    fi
+    echo "[model] Removing undersized InstaOrder stub ($sz bytes): $out"
+    rm -f "$out"
+  fi
+
+  echo "[model] Downloading InstaOrderNet_od via gdown (Google Drive) ..."
+  local gdown_id="1QLikFxNOEW1Ld2oAZff8mL26FO4Mwwpv"  # InstaOrderNet o,d
+  if conda run -n "$AMODAL_ENV_NAME" python -m pip show gdown >/dev/null 2>&1 || \
+     conda run -n "$AMODAL_ENV_NAME" python -m pip install -q "gdown>=5.0"; then
+    if conda run -n "$AMODAL_ENV_NAME" python -m gdown --fuzzy \
+      "https://drive.google.com/uc?id=${gdown_id}" -O "$out"; then
+      local sz
+      sz="$(wc -c <"$out" | tr -d '[:space:]')"
+      if [ "$sz" -ge "$min_bytes" ]; then
+        echo "[model] Saved: $out ($sz bytes)"
+        return 0
+      fi
+      rm -f "$out"
+    fi
+  fi
+
+  echo "WARN: InstaOrder auto-download failed."
+  echo "      Manual options:"
+  echo "        1) gdown --fuzzy 'https://drive.google.com/uc?id=${gdown_id}' -O '$out'"
+  echo "        2) Full pack (3.5G): https://drive.google.com/file/d/1_GEmCmofLSkJZnidfp4vsQb2Nqq5aqBU/view"
+  echo "           unzip and copy InstaOrder_InstaOrderNet_od.pth.tar → $out"
+  return 1
 }
 
 # --- Sibling repos ---
@@ -93,36 +153,27 @@ link_sibling "InstaOrder" "$INSTAORDER_REPO"
 link_sibling "Grounded-Segment-Anything" "$GROUNDED_SAM_REPO"
 link_sibling "recognize-anything" "$RAM_REPO"
 
-# --- Checkpoints ---
-# GroundingDINO
+# --- Checkpoints (min sizes reject 0-byte / HTML error pages) ---
+# GroundingDINO ~694 MiB
 download_file \
   "https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth" \
-  "$GDINO_CKPT"
+  "$GDINO_CKPT" \
+  104857600
 
-# SAM ViT-H
+# SAM ViT-H ~2.4 GiB
 download_file \
   "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth" \
-  "$SAM_CKPT"
+  "$SAM_CKPT" \
+  1073741824
 
 # RAM++
 download_file \
   "https://huggingface.co/xinyu1205/recognize-anything-plus-model/resolve/main/ram_plus_swin_large_14m.pth" \
-  "$RAM_CKPT"
+  "$RAM_CKPT" \
+  524288000
 
-# InstaOrder checkpoint (official release)
-mkdir -p "$(dirname "$INSTAORDER_CKPT")"
-if [ ! -f "$INSTAORDER_CKPT" ]; then
-  echo "[model] Downloading InstaOrder checkpoint ..."
-  # Common mirror path used by community; if this fails, see GUIDE.md
-  download_file \
-    "https://github.com/POSTECH-CVLab/InstaOrder/releases/download/v1.0/InstaOrder_InstaOrderNet_od.pth.tar" \
-    "$INSTAORDER_CKPT" || true
-  if [ ! -f "$INSTAORDER_CKPT" ]; then
-    echo "WARN: InstaOrder ckpt auto-download failed."
-    echo "      Place InstaOrder_InstaOrderNet_od.pth.tar at:"
-    echo "      $INSTAORDER_CKPT"
-  fi
-fi
+# InstaOrderNet_od (Drive; old GitHub release URL is 404 → 0-byte stub)
+download_instaorder_ckpt || true
 
 # LISA-13B weights
 if [ ! -d "$LISA_MODEL_PATH" ] || [ -z "$(ls -A "$LISA_MODEL_PATH" 2>/dev/null || true)" ]; then
@@ -174,6 +225,11 @@ echo "  SAM ckpt   : $SAM_CKPT"
 echo "  RAM ckpt   : $RAM_CKPT"
 echo "  InstaOrder : $INSTAORDER_CKPT"
 echo "  SD model   : $SD_MODEL_ID"
+
+echo
+echo "[model] Verifying checkpoint file sizes ..."
+python3 "$AMODAL_ROOT/scripts/verify_checkpoints.py" || \
+  echo "WARN: verify_checkpoints failed — fix downloads above before Gradio/main."
 
 if command -v conda >/dev/null 2>&1; then
   echo

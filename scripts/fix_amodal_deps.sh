@@ -35,8 +35,10 @@ python -m pip install \
   "starlette>=0.37,<1.0" \
   "fastapi>=0.111,<0.116"
 
-echo "[fix_amodal_deps] Sibling runtime deps (GroundingDINO / InstaOrder) ..."
-python -m pip install "addict>=2.4.0" "yapf>=0.40.0" "pycocotools>=2.0.6" "supervision>=0.22.0"
+echo "[fix_amodal_deps] Sibling runtime deps (GroundingDINO / InstaOrder / RAM) ..."
+python -m pip install \
+  "addict>=2.4.0" "yapf>=0.40.0" "pycocotools>=2.0.6" "supervision>=0.22.0" \
+  "fairscale>=0.4.4"
 
 echo "[fix_amodal_deps] Reinstalling segment_anything (broken stub → SamPredictor missing) ..."
 # A bad/empty pip package shadows Grounded-SAM's local copy ("unknown location").
@@ -55,6 +57,8 @@ if [ -d "$GROUNDED_SAM_REPO/GroundingDINO" ]; then
 fi
 if [ -d "$RAM_REPO" ]; then
   echo "[fix_amodal_deps] Ensuring RAM editable install ..."
+  # Do not pip -r RAM requirements.txt (pins ancient timm / reinstalls CLIP).
+  python -m pip install "fairscale>=0.4.4"
   python -m pip install -e "$RAM_REPO" || echo "WARN: RAM editable install failed"
 fi
 

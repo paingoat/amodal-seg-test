@@ -20,6 +20,13 @@ MODEL_PATH="${LISA_MODEL_PATH:-$LISA_REPO/LISA-13B-llama2-v1}"
 echo "[start_lisa] repo=$LISA_REPO model=$MODEL_PATH port=$LISA_SERVER_PORT"
 echo "[start_lisa] Tip: after masks are cached, run scripts/stop_lisa.sh to free VRAM."
 
+echo "[start_lisa] Checking LISA weights ..."
+python "$AMODAL_ROOT/scripts/verify_checkpoints.py" --lisa-only || {
+  echo "[start_lisa] Abort: LISA weights missing/incomplete."
+  echo "  bash scripts/model.sh"
+  exit 1
+}
+
 # Keep fp16 for quality parity with the original paper code.
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}" python app.py \
   --version "$MODEL_PATH" \
