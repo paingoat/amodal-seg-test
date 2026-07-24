@@ -167,3 +167,10 @@ echo "  SAM ckpt   : $SAM_CKPT"
 echo "  RAM ckpt   : $RAM_CKPT"
 echo "  InstaOrder : $INSTAORDER_CKPT"
 echo "  SD model   : $SD_MODEL_ID"
+
+if command -v conda >/dev/null 2>&1; then
+  echo
+  echo "[model] Full amodal import check (pip + siblings) ..."
+  conda run -n "$AMODAL_ENV_NAME" python "$AMODAL_ROOT/scripts/verify_amodal.py" || \
+    echo "WARN: verify_amodal reported missing packages — run fix_amodal_deps.sh / re-check installs."
+fi

@@ -1,8 +1,12 @@
 # Main pipeline env (amodal) — install torch separately via scripts/env.sh
 # torch==2.13.0+cu132 / torchvision==0.28.0+cu132 from PyTorch cu132 index
 #
-# OpenAI CLIP is installed separately in scripts/env.sh with --no-build-isolation
-# (its setup.py needs pkg_resources; isolated builds fail on modern pip/setuptools).
+# OpenAI CLIP is installed separately in scripts/env.sh with --no-build-isolation.
+#
+# HF stack lock (CRITICAL):
+#   diffusers 0.39+ imports Dinov2WithRegistersConfig and needs transformers>=~4.57.
+#   We pin diffusers 0.32.2 + transformers 4.46.3 — enough for SD2 inpaint and
+#   safer for GroundingDINO / RAM loaders used by this pipeline.
 
 numpy>=1.26.0
 tqdm>=4.66.0
@@ -22,12 +26,13 @@ albumentations>=1.3.0
 tabulate>=0.9.0
 requests>=2.31.0
 safetensors>=0.4.0
-huggingface_hub>=0.26.0
-diffusers==0.39.0
+huggingface_hub>=0.26.0,<0.30.0
+diffusers==0.32.2
 transformers==4.46.3
 accelerate==1.2.1
+tokenizers>=0.19,<0.21
 gradio==4.44.1
-gradio_client>=1.3.0
+gradio_client>=1.3.0,<1.5.0
 kornia>=0.7.0
 scipy>=1.11.0
 timm>=0.9.0

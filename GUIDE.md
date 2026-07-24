@@ -324,8 +324,69 @@ OOM khi chạy main (LISA đã tắt rồi mà vẫn thiếu VRAM): thêm `--sd_
 - `run_lisa_batch.py` / `main.py` / Gradio phải là **`amodal`**.
 - Triệu chứng hay gặp: import lỗi / transformers version conflict → đang activate sai env.
 
-### `sm_120` / `no kernel image`
-Cài lại torch `cu132` trong đúng env (xem `scripts/env.sh`).
+### `ModuleNotFoundError: No module named 'pkg_resources'`
+### `AttributeError: 'FieldInfo' object has no attribute 'in_'`
+### `ModuleNotFoundError: No module named 'gradio_client.serializing'`
+
+Ba lỗi này đều do **stack Gradio 3.39 trong env `lisa` bị lệch version** (setuptools mới / pydantic 2 / `gradio_client` 1.x–2.x).
+
+**Fix nhanh (env hiện tại — không xóa env):**
+
+```bash
+cd /path/to/MVP1
+source scripts/paths.env
+bash scripts/fix_lisa_deps.sh
+bash scripts/start_lisa.sh
+```
+
+Hoặc tay:
+
+```bash
+conda activate lisa
+python -m pip install \
+  "setuptools>=68,<81" \
+  "pydantic==1.10.13" \
+  "fastapi==0.100.1" \
+  "starlette==0.27.0" \
+  "gradio_client==0.5.0" \
+  "gradio==3.39.0" \
+  "huggingface_hub>=0.16,<0.23" \
+  "websockets>=10,<12" \
+  "uvicorn==0.23.2"
+```
+
+Kiểm tra version đúng:
+
+```bash
+conda activate lisa
+python -c "import pydantic,gradio,gradio_client; from gradio_client.serializing import JSONSerializable; print(pydantic.__version__, gradio.__version__, gradio_client.__version__)"
+# Kỳ vọng: 1.10.x  3.39.x  0.5.x
+```
+
+Log `[LISA] DeepSpeed init_inference failed ... using plain fp16` là **bình thường** (fallback sẵn).
+
+### `ModuleNotFoundError: No module named 'clip'`
+OpenAI CLIP phải cài riêng (`--no-build-isolation`).
+
+```bash
+conda activate amodal
+source scripts/paths.env
+bash scripts/fix_amodal_deps.sh
+python scripts/verify_amodal.py
+```
+
+### `cannot import name 'Dinov2WithRegistersConfig'` (amodal / start_gradio / main.py)
+`diffusers 0.39` cần `transformers` rất mới. Repo **cố ý pin** `diffusers==0.32.2` + `transformers==4.46.3` (đủ cho SD2 inpaint).
+
+**Fix nhanh (env hiện tại):**
+
+```bash
+cd /path/to/MVP1
+source scripts/paths.env
+bash scripts/fix_amodal_deps.sh
+python scripts/verify_amodal.py
+bash scripts/start_gradio.sh
+```
 
 ### OOM
 Thường do LISA chưa tắt: `bash scripts/stop_lisa.sh` rồi `nvidia-smi`.

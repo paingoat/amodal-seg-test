@@ -1,28 +1,53 @@
 # LISA server env (lisa) — install torch separately via scripts/env.sh
-# torch==2.13.0+cu132 / torchvision==0.28.0+cu132 from PyTorch cu132 index
-# Keep transformers/peft pins aligned with upstream LISA for weight loading.
+#
+# CRITICAL: Gradio 3.39 requires this exact compatibility cluster.
+# Do NOT let pip upgrade gradio_client to 1.x/2.x (breaks serializing API)
+# or pydantic to 2.x (breaks FastAPI FieldInfo.in_).
 
+# --- build / packaging ---
+setuptools>=68.0.0,<81
+wheel
 packaging
+
+# --- Gradio 3.39 stack (pin tightly; install together) ---
+pydantic==1.10.13
+fastapi==0.100.1
+starlette==0.27.0
+gradio_client==0.5.0
+gradio==3.39.0
+websockets>=10.0,<12
+aiofiles
+ffmpy
+pydub
+python-multipart
+orjson
+uvicorn==0.23.2
+markdown-it-py>=2.0,<3
+mdit-py-plugins
+linkify-it-py
+altair
+matplotlib
+pandas
+semantic-version
+markupsafe>=2.0,<3
+
+# --- LISA model stack ---
 sentencepiece
 peft==0.4.0
 einops==0.4.1
-fastapi==0.100.1
-gradio==3.39.0
-gradio_client==0.5.0
-markdown2==2.4.10
 numpy>=1.24.2,<2.0.0
 opencv-python>=4.8.0
-Pillow>=9.4.0
+Pillow>=9.4.0,<11
 pycocotools>=2.0.6
 Requests>=2.31.0
 shortuuid==1.0.11
 tqdm>=4.64.1
 transformers==4.31.0
-uvicorn==0.23.2
 scipy>=1.11.0
 bitsandbytes>=0.43.0
 deepspeed>=0.15.0
 bleach>=6.0.0
 safetensors>=0.4.0
-huggingface_hub>=0.26.0
-accelerate>=0.21.0
+huggingface_hub>=0.16.0,<0.23.0
+accelerate>=0.21.0,<0.28.0
+httpx>=0.24,<0.28

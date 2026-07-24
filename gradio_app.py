@@ -53,7 +53,24 @@ def _load_dotenv(path: str) -> None:
 
 _load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
-import main as pipeline  # noqa: E402
+# Lazy-import main only when running the heavy pipeline (keeps UI startup light).
+pipeline = None
+
+
+def _get_pipeline():
+    global pipeline
+    if pipeline is None:
+        try:
+            import main as pipeline_mod
+        except ModuleNotFoundError as exc:
+            missing = getattr(exc, "name", None) or str(exc)
+            raise RuntimeError(
+                f"Cannot import main.py (missing dependency: {missing}). "
+                "In env amodal run: bash scripts/fix_amodal_deps.sh && "
+                "bash scripts/model.sh && python scripts/verify_amodal.py"
+            ) from exc
+        pipeline = pipeline_mod
+    return pipeline
 
 
 def _env(name: str, default: str) -> str:
@@ -243,7 +260,7 @@ def run_main_on_upload(image, text_query, lisa_stem, max_iter, sd_cpu_offload, o
             sd_cpu_offload=bool(sd_cpu_offload),
             require_cache=True,
         )
-        pipeline.run_pipeline(args, ["input.png"], 0, 1)
+        _get_pipeline().run_pipeline(args, ["input.png"], 0, 1)
     except Exception as exc:
         os.chdir(prev)
         return None, f"Pipeline failed: {exc}"
