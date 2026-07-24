@@ -419,46 +419,45 @@ bash scripts/start_gradio.sh
 Mask LISA đã cache vẫn dùng lại — không cần Start LISA / cache lại.
 
 ### `Pipeline failed: name '_C' is not defined`
-GroundingDINO đã import được Python package nhưng custom CUDA extension
-`groundingdino._C` (multi-scale deformable attention) chưa được build/load.
-Lỗi chỉ xuất hiện lúc chạy detection, sau khi các model đã load.
+GroundingDINO thiếu custom CUDA extension `groundingdino._C`. Lỗi chỉ hiện lúc
+detection (sau khi model đã load). Trên lab Ubuntu 24.04 thường gặp vì:
+
+- PyTorch = `2.13.0+cu132` (cần toolkit **13.2**)
+- Hệ thống chỉ có `/usr/bin/nvcc` **12.0** (Ubuntu `nvidia-cuda-toolkit`)
+- `apt install cuda-toolkit-13-2` fail vì **chưa thêm NVIDIA CUDA apt repo**
+
+#### Cách A — nhanh (workaround, không cần toolkit)
+Dùng pure-PyTorch MSDeformAttn (hơi chậm hơn, vẫn chạy trên GPU):
 
 ```bash
 conda activate amodal
 source scripts/paths.env
 pkill -f "python gradio_app.py" || true
-
-# cần CUDA toolkit có nvcc, không chỉ NVIDIA driver
-which nvcc
-python -c "import torch; print(torch.__version__, torch.version.cuda)"
-
-bash scripts/fix_groundingdino_ops.sh
-python scripts/verify_groundingdino_ops.py
+python scripts/patch_groundingdino_pytorch_attn.py
+export GDINO_ALLOW_PYTORCH_ATTN=1
 bash scripts/start_gradio.sh
 ```
 
-RTX 5090 dùng compute capability `12.0`; script tự đặt
-`TORCH_CUDA_ARCH_LIST=12.0`, suy ra `CUDA_HOME` từ `nvcc`, build
-`GroundingDINO` với `--no-build-isolation`, rồi kiểm tra `_C`.
-Nếu `nvcc` không tồn tại, cài CUDA toolkit cùng version với
-`torch.version.cuda` trước. Mask LISA cũ vẫn dùng lại được.
-
-Nếu báo `detected CUDA 12.0 mismatches PyTorch 13.2`, máy chỉ có compiler
-`/usr/bin/nvcc` 12.0 dù driver/PyTorch đã là 13.2. Cần toolkit 13.2:
+#### Cách B — đúng (build `_C` với CUDA 13.2)
+Thêm NVIDIA CUDA repo rồi cài **chỉ toolkit** (không đụng driver):
 
 ```bash
-# NVIDIA CUDA apt repository phải được cấu hình trước
-sudo apt update
-sudo apt install cuda-toolkit-13-2
+sudo bash scripts/install_cuda_toolkit_13_2.sh
+# tương đương:
+#   wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+#   sudo dpkg -i cuda-keyring_1.1-1_all.deb
+#   sudo apt update && sudo apt install cuda-toolkit-13-2
 
 /usr/local/cuda-13.2/bin/nvcc --version
 export CUDA_HOME=/usr/local/cuda-13.2
 export PATH="$CUDA_HOME/bin:$PATH"
 bash scripts/fix_groundingdino_ops.sh
+python scripts/verify_groundingdino_ops.py
+bash scripts/start_gradio.sh
 ```
 
-Không downgrade PyTorch xuống CUDA 12.0: toolkit 12.0 không hỗ trợ kiến trúc
-Blackwell `sm_120` của RTX 5090.
+Không downgrade PyTorch xuống CUDA 12.0: toolkit 12.0 **không** hỗ trợ
+Blackwell `sm_120` (RTX 5090). Mask LISA cũ vẫn dùng lại được.
 
 ### `ModuleNotFoundError: No module named 'fairscale'`
 RAM (`recognize-anything`) cần `fairscale`:

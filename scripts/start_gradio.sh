@@ -24,12 +24,21 @@ python "$SCRIPT_DIR/verify_checkpoints.py" || {
   exit 1
 }
 
-echo "[start_gradio] Checking GroundingDINO CUDA ops ..."
-python "$SCRIPT_DIR/verify_groundingdino_ops.py" || {
-  echo "[start_gradio] Abort: GroundingDINO _C extension is unavailable."
-  echo "  bash scripts/fix_groundingdino_ops.sh"
-  exit 1
-}
+echo "[start_gradio] Checking GroundingDINO attention ops ..."
+# Prefer compiled _C; if missing, auto-enable pure-PyTorch MSDeformAttn fallback.
+if ! python "$SCRIPT_DIR/verify_groundingdino_ops.py"; then
+  echo "[start_gradio] Compiled _C missing — enabling PyTorch attention fallback ..."
+  python "$SCRIPT_DIR/patch_groundingdino_pytorch_attn.py" || {
+    echo "[start_gradio] Abort: cannot patch GroundingDINO attention fallback."
+    echo "  Preferred: sudo bash scripts/install_cuda_toolkit_13_2.sh && bash scripts/fix_groundingdino_ops.sh"
+    exit 1
+  }
+  export GDINO_ALLOW_PYTORCH_ATTN=1
+  python "$SCRIPT_DIR/verify_groundingdino_ops.py" || {
+    echo "[start_gradio] Abort: GroundingDINO attention still unavailable."
+    exit 1
+  }
+fi
 
 echo "[start_gradio] http://0.0.0.0:${GRADIO_PIPELINE_PORT}  (LISA must use ${LISA_SERVER_PORT})"
 python gradio_app.py --port "$GRADIO_PIPELINE_PORT"

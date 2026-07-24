@@ -53,9 +53,17 @@ done
 if [ -z "$NVCC_PATH" ]; then
   echo "[fix_groundingdino_ops] ERROR: no nvcc matching PyTorch CUDA $TORCH_CUDA_VERSION."
   echo "Detected: ${DETECTED_NVCC:-none}"
-  echo "Install the matching toolkit (Ubuntu with NVIDIA CUDA repo configured):"
-  echo "  sudo apt update && sudo apt install cuda-toolkit-${TORCH_CUDA_VERSION/./-}"
-  echo "Then rerun this script. Do not use the generic 'cuda' package to replace the driver."
+  echo
+  echo "Preferred (build real CUDA ops):"
+  echo "  sudo bash scripts/install_cuda_toolkit_13_2.sh"
+  echo "  export CUDA_HOME=/usr/local/cuda-13.2"
+  echo "  export PATH=\"\$CUDA_HOME/bin:\$PATH\""
+  echo "  bash scripts/fix_groundingdino_ops.sh"
+  echo
+  echo "Quick workaround without toolkit (pure-PyTorch attention, slightly slower):"
+  echo "  python scripts/patch_groundingdino_pytorch_attn.py"
+  echo "  export GDINO_ALLOW_PYTORCH_ATTN=1"
+  echo "  bash scripts/start_gradio.sh"
   exit 1
 fi
 
