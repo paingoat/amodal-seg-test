@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from types import SimpleNamespace
 
 import gradio as gr
@@ -263,7 +264,8 @@ def run_main_on_upload(image, text_query, lisa_stem, max_iter, sd_cpu_offload, o
         _get_pipeline().run_pipeline(args, ["input.png"], 0, 1)
     except Exception as exc:
         os.chdir(prev)
-        return None, f"Pipeline failed: {exc}"
+        traceback.print_exc()
+        return None, f"Pipeline failed: {type(exc).__name__}: {exc}"
     finally:
         os.chdir(prev)
 

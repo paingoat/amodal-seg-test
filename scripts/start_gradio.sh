@@ -24,5 +24,12 @@ python "$SCRIPT_DIR/verify_checkpoints.py" || {
   exit 1
 }
 
+echo "[start_gradio] Checking GroundingDINO CUDA ops ..."
+python "$SCRIPT_DIR/verify_groundingdino_ops.py" || {
+  echo "[start_gradio] Abort: GroundingDINO _C extension is unavailable."
+  echo "  bash scripts/fix_groundingdino_ops.sh"
+  exit 1
+}
+
 echo "[start_gradio] http://0.0.0.0:${GRADIO_PIPELINE_PORT}  (LISA must use ${LISA_SERVER_PORT})"
 python gradio_app.py --port "$GRADIO_PIPELINE_PORT"

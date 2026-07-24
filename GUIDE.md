@@ -418,6 +418,31 @@ bash scripts/start_gradio.sh
 
 Mask LISA đã cache vẫn dùng lại — không cần Start LISA / cache lại.
 
+### `Pipeline failed: name '_C' is not defined`
+GroundingDINO đã import được Python package nhưng custom CUDA extension
+`groundingdino._C` (multi-scale deformable attention) chưa được build/load.
+Lỗi chỉ xuất hiện lúc chạy detection, sau khi các model đã load.
+
+```bash
+conda activate amodal
+source scripts/paths.env
+pkill -f "python gradio_app.py" || true
+
+# cần CUDA toolkit có nvcc, không chỉ NVIDIA driver
+which nvcc
+python -c "import torch; print(torch.__version__, torch.version.cuda)"
+
+bash scripts/fix_groundingdino_ops.sh
+python scripts/verify_groundingdino_ops.py
+bash scripts/start_gradio.sh
+```
+
+RTX 5090 dùng compute capability `12.0`; script tự đặt
+`TORCH_CUDA_ARCH_LIST=12.0`, suy ra `CUDA_HOME` từ `nvcc`, build
+`GroundingDINO` với `--no-build-isolation`, rồi kiểm tra `_C`.
+Nếu `nvcc` không tồn tại, cài CUDA toolkit cùng version với
+`torch.version.cuda` trước. Mask LISA cũ vẫn dùng lại được.
+
 ### `ModuleNotFoundError: No module named 'fairscale'`
 RAM (`recognize-anything`) cần `fairscale`:
 

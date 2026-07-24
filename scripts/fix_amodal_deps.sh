@@ -51,9 +51,8 @@ else
 fi
 
 if [ -d "$GROUNDED_SAM_REPO/GroundingDINO" ]; then
-  echo "[fix_amodal_deps] Ensuring GroundingDINO editable install ..."
-  python -m pip install -e "$GROUNDED_SAM_REPO/GroundingDINO" || \
-    echo "WARN: GroundingDINO editable install failed"
+  echo "[fix_amodal_deps] Building GroundingDINO CUDA ops ..."
+  bash "$SCRIPT_DIR/fix_groundingdino_ops.sh"
 fi
 if [ -d "$RAM_REPO" ]; then
   echo "[fix_amodal_deps] Ensuring RAM editable install ..."

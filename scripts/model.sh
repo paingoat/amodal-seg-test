@@ -209,8 +209,8 @@ if command -v conda >/dev/null 2>&1; then
   if [ -f "$GROUNDED_SAM_REPO/GroundingDINO/requirements.txt" ]; then
     conda run -n "$AMODAL_ENV_NAME" python -m pip install -r "$GROUNDED_SAM_REPO/GroundingDINO/requirements.txt" || true
   fi
-  conda run -n "$AMODAL_ENV_NAME" python -m pip install -e "$GROUNDED_SAM_REPO/GroundingDINO" || \
-    echo "WARN: GroundingDINO editable install failed (see GUIDE.md)."
+  bash "$SCRIPT_DIR/fix_groundingdino_ops.sh" || \
+    echo "WARN: GroundingDINO CUDA ops build failed (run scripts/fix_groundingdino_ops.sh)."
   conda run -n "$AMODAL_ENV_NAME" python -m pip install -e "$GROUNDED_SAM_REPO/segment_anything" || \
     conda run -n "$AMODAL_ENV_NAME" python -m pip install git+https://github.com/facebookresearch/segment-anything.git || true
   conda run -n "$AMODAL_ENV_NAME" python -m pip install -e "$RAM_REPO" || true

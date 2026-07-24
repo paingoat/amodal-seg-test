@@ -96,6 +96,16 @@ def main() -> int:
         errors.append(f"segment_anything.SamPredictor: {exc}")
         print(f"  FAIL segment_anything.SamPredictor: {exc}")
 
+    try:
+        from groundingdino import _C as _gdino_ops
+
+        assert hasattr(_gdino_ops, "ms_deform_attn_forward")
+        assert hasattr(_gdino_ops, "ms_deform_attn_backward")
+        print(f"  OK  GroundingDINO CUDA ops @ {_gdino_ops.__file__}")
+    except Exception as exc:
+        errors.append(f"GroundingDINO CUDA ops (_C): {exc}")
+        print(f"  FAIL GroundingDINO CUDA ops (_C): {exc}")
+
     if errors:
         print("\n[verify_amodal] FAILED:")
         for e in errors:
