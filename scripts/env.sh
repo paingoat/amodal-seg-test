@@ -60,6 +60,12 @@ install_torch "$LISA_ENV_NAME"
 echo "[env] Installing amodal requirements ..."
 conda run -n "$AMODAL_ENV_NAME" python -m pip install -r "$AMODAL_ROOT/requirements.txt"
 
+# OpenAI CLIP: setup.py imports pkg_resources; pip build isolation breaks on modern setuptools.
+# Install into the env without isolation after setuptools is present.
+echo "[env] Installing OpenAI CLIP (no build isolation) ..."
+conda run -n "$AMODAL_ENV_NAME" python -m pip install --no-build-isolation \
+  "git+https://github.com/openai/CLIP.git@d50d76daa670286dd6cacf3bcd80b5e4823fc8e1"
+
 echo "[env] Installing lisa requirements ..."
 conda run -n "$LISA_ENV_NAME" python -m pip install -r "$AMODAL_ROOT/requirements-lisa.txt"
 

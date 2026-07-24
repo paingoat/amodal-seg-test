@@ -119,6 +119,20 @@ source scripts/paths.env
 bash scripts/env.sh          # tạo env amodal + lisa (không dùng -y; xác nhận tay)
 ```
 
+Nếu `env.sh` dừng giữa chừng (ví dụ lỗi CLIP) mà **torch đã cài xong** cho cả hai env: **không cần xóa env**. Chỉ cài tiếp phần còn thiếu:
+
+```bash
+source scripts/paths.env
+conda activate amodal
+python -m pip install -r requirements.txt
+python -m pip install --no-build-isolation \
+  "git+https://github.com/openai/CLIP.git@d50d76daa670286dd6cacf3bcd80b5e4823fc8e1"
+conda activate lisa
+python -m pip install -r requirements-lisa.txt
+conda activate amodal
+python scripts/check_gpu.py
+```
+
 ### 1.4 Tải model / clone sibling
 
 ```bash

@@ -1,7 +1,10 @@
 # Main pipeline env (amodal) — install torch separately via scripts/env.sh
 # torch==2.13.0+cu132 / torchvision==0.28.0+cu132 from PyTorch cu132 index
+#
+# OpenAI CLIP is installed separately in scripts/env.sh with --no-build-isolation
+# (its setup.py needs pkg_resources; isolated builds fail on modern pip/setuptools).
 
-numpy>=1.26.0,<2.0.0
+numpy>=1.26.0
 tqdm>=4.66.0
 matplotlib>=3.8.0
 pandas>=2.1.0
@@ -28,4 +31,7 @@ gradio_client>=1.3.0
 kornia>=0.7.0
 scipy>=1.11.0
 timm>=0.9.0
-clip @ https://github.com/openai/CLIP/archive/d50d76daa670286dd6cacf3bcd80b5e4823fc8e1.zip
+ftfy>=6.1.0
+regex>=2023.0.0
+setuptools>=68.0.0,<81
+wheel
