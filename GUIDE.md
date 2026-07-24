@@ -395,28 +395,28 @@ python -m pip install \
 ```
 
 ### `cannot import name 'SamPredictor' from 'segment_anything' (unknown location)`
-Package `segment_anything` trong env `amodal` bị hỏng/stub (che bản trong Grounded-SAM).
+Hai nguyên nhân thường gặp:
+
+1. Package pip hỏng/stub trong env `amodal`
+2. Process **Gradio cũ** vẫn chạy (import `main` lần đầu bị lỗi / path sai) — **không cần** `conda deactivate`
 
 ```bash
 conda activate amodal
 source scripts/paths.env
-# nếu chưa clone sibling:
-# bash scripts/model.sh
-bash scripts/fix_amodal_deps.sh
-python -c "from segment_anything import SamPredictor, build_sam; import segment_anything as s; print(s.__file__)"
-```
 
-Hotfix tay:
-
-```bash
-conda activate amodal
-source scripts/paths.env
+# cài lại SAM (nếu chưa)
 python -m pip uninstall -y segment-anything segment_anything
 python -m pip install -e "$GROUNDED_SAM_REPO/segment_anything"
-# fallback: python -m pip install git+https://github.com/facebookresearch/segment-anything.git
+
+# bắt buộc: kill Gradio cũ rồi start lại (Ctrl+C hoặc:)
+pkill -f "python gradio_app.py" || true
+# kiểm tra import giống Gradio (qua main.py):
+python -c "import main; from segment_anything import SamPredictor; print('OK')"
+
+bash scripts/start_gradio.sh
 ```
 
-Mask LISA đã cache vẫn dùng lại được — chỉ cần sửa env rồi **Run main pipeline** lại (không cần cache lại).
+Mask LISA đã cache vẫn dùng lại — không cần Start LISA / cache lại.
 
 ### `ModuleNotFoundError: No module named 'clip'`
 OpenAI CLIP phải cài riêng (`--no-build-isolation`): `bash scripts/fix_amodal_deps.sh`.

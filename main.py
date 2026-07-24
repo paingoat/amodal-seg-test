@@ -28,35 +28,72 @@ from gradio_client import Client
 from diffusers import StableDiffusionInpaintPipeline
 import clip
 
-# InstaOrder
-# https://github.com/POSTECH-CVLab/InstaOrder
-sys.path.append('InstaOrder')
-import models
-import inference as infer
-
-# Grounding DINO
-# https://github.com/IDEA-Research/GroundingDINO
-sys.path.append("Grounded-Segment-Anything")
-sys.path.append("Grounded-Segment-Anything/GroundingDINO")
-import GroundingDINO.groundingdino.datasets.transforms as T
-from GroundingDINO.groundingdino.models import build_model
-from GroundingDINO.groundingdino.util.slconfig import SLConfig
-from GroundingDINO.groundingdino.util.utils import clean_state_dict, get_phrases_from_posmap
-
-# Segment Anything
-# https://github.com/facebookresearch/segment-anything
-from segment_anything import build_sam, SamPredictor
-
-# RAM
-# https://github.com/xinyu1205/recognize-anything
-from ram.models import ram_plus
-from ram import inference_ram as inference
-from ram import get_transform
-
 # ---------------------------------------------------------------------------
 # Paths / HF cache (repo-root layout + optional .env)
 # ---------------------------------------------------------------------------
 _REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def _add_sys_path(*candidates: str, front: bool = False) -> str | None:
+    """Add the first existing directory to sys.path. Returns the path used."""
+    for rel_or_abs in candidates:
+        path = rel_or_abs if os.path.isabs(rel_or_abs) else os.path.join(_REPO_ROOT, rel_or_abs)
+        if not os.path.isdir(path):
+            continue
+        if path in sys.path:
+            sys.path.remove(path)
+        if front:
+            sys.path.insert(0, path)
+        else:
+            sys.path.append(path)
+        return path
+    return None
+
+
+# Segment Anything MUST be on sys.path *before* Grounded-Segment-Anything/.
+# Appending that parent exposes the outer setuptools dir as a namespace package
+# ("unknown location") and shadows SamPredictor.
+_SAM_PATH = _add_sys_path(
+    os.path.join("Grounded-Segment-Anything", "segment_anything"),
+    os.path.join("third_party", "Grounded-Segment-Anything", "segment_anything"),
+    front=True,
+)
+from segment_anything import build_sam, SamPredictor  # noqa: E402
+
+# InstaOrder
+# https://github.com/POSTECH-CVLab/InstaOrder
+_add_sys_path("InstaOrder", os.path.join("third_party", "InstaOrder"))
+import models  # noqa: E402
+import inference as infer  # noqa: E402
+
+# Grounding DINO (append only — never ahead of _SAM_PATH)
+# https://github.com/IDEA-Research/GroundingDINO
+_add_sys_path(
+    "Grounded-Segment-Anything",
+    os.path.join("third_party", "Grounded-Segment-Anything"),
+)
+_add_sys_path(
+    os.path.join("Grounded-Segment-Anything", "GroundingDINO"),
+    os.path.join("third_party", "Grounded-Segment-Anything", "GroundingDINO"),
+)
+if _SAM_PATH:
+    # Keep SAM first even if something reordered paths.
+    if _SAM_PATH in sys.path:
+        sys.path.remove(_SAM_PATH)
+    sys.path.insert(0, _SAM_PATH)
+import GroundingDINO.groundingdino.datasets.transforms as T  # noqa: E402
+from GroundingDINO.groundingdino.models import build_model  # noqa: E402
+from GroundingDINO.groundingdino.util.slconfig import SLConfig  # noqa: E402
+from GroundingDINO.groundingdino.util.utils import (  # noqa: E402
+    clean_state_dict,
+    get_phrases_from_posmap,
+)
+
+# RAM
+# https://github.com/xinyu1205/recognize-anything
+from ram.models import ram_plus  # noqa: E402
+from ram import inference_ram as inference  # noqa: E402
+from ram import get_transform  # noqa: E402
 
 
 def _load_dotenv(path: str) -> None:
