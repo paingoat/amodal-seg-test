@@ -61,6 +61,11 @@ if [ -d "$RAM_REPO" ]; then
   python -m pip install -e "$RAM_REPO" || echo "WARN: RAM editable install failed"
 fi
 
+if [ -d "$INSTAORDER_REPO" ] || [ -d "$AMODAL_ROOT/InstaOrder" ]; then
+  echo "[fix_amodal_deps] Patching InstaOrder for NumPy>=1.24 ..."
+  python "$SCRIPT_DIR/patch_instaorder_numpy.py" || true
+fi
+
 echo "[fix_amodal_deps] Verifying imports ..."
 python "$AMODAL_ROOT/scripts/verify_amodal.py"
 

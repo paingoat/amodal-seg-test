@@ -216,6 +216,7 @@ if command -v conda >/dev/null 2>&1; then
   conda run -n "$AMODAL_ENV_NAME" python -m pip install -e "$RAM_REPO" || true
   # InstaOrder is imported via sys.path; ensure pycocotools present
   conda run -n "$AMODAL_ENV_NAME" python -m pip install "pycocotools>=2.0.6" || true
+  conda run -n "$AMODAL_ENV_NAME" python "$AMODAL_ROOT/scripts/patch_instaorder_numpy.py" || true
 fi
 
 echo

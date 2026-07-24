@@ -40,5 +40,10 @@ if ! python "$SCRIPT_DIR/verify_groundingdino_ops.py"; then
   }
 fi
 
+echo "[start_gradio] Patching InstaOrder for NumPy>=1.24 ..."
+python "$SCRIPT_DIR/patch_instaorder_numpy.py" || {
+  echo "[start_gradio] WARN: InstaOrder numpy patch failed (continuing)."
+}
+
 echo "[start_gradio] http://0.0.0.0:${GRADIO_PIPELINE_PORT}  (LISA must use ${LISA_SERVER_PORT})"
 python gradio_app.py --port "$GRADIO_PIPELINE_PORT"

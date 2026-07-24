@@ -486,6 +486,21 @@ python -m pip install "fairscale>=0.4.13"
 python -c "import main; print('OK')"
 ```
 
+### `AttributeError: module 'numpy' has no attribute 'int'`
+InstaOrder (code cũ) dùng `np.int` — NumPy≥1.24 đã xóa alias này.
+
+```bash
+conda activate amodal
+source scripts/paths.env
+python scripts/patch_instaorder_numpy.py
+# hoặc hotfix tay:
+# sed -i 's/np\.int\b/int/g' InstaOrder/inference.py third_party/InstaOrder/inference.py
+pkill -f "python gradio_app.py" || true
+bash scripts/start_gradio.sh
+```
+
+`start_gradio.sh` đã tự chạy patch này trước khi launch.
+
 ### `ModuleNotFoundError: No module named 'clip'`
 OpenAI CLIP phải cài riêng (`--no-build-isolation`): `bash scripts/fix_amodal_deps.sh`.
 
